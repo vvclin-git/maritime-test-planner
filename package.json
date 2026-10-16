@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests.mjs && node search-tests.mjs"
+    "test": "node tests.mjs && node search-tests.mjs && node sky-tests.mjs"
   }
 }

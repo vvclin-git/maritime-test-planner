@@ -4,7 +4,7 @@ Browser-local maritime test route planner.
 
 部署與使用方式請見 [DEPLOY_GITHUB.md](DEPLOY_GITHUB.md)。
 
-此套件包含航線編輯、光照分析、出發時間搜尋、四視角立體天球及 GitHub Pages 自動部署設定。
+此套件包含航線編輯、光照分析、出發時間搜尋、北向固定立體天球與四方向相機快捷設定及 GitHub Pages 自動部署設定。
 
 ## Modules
 - `dist/modules/geometry.js`: pure spherical geodesy, NOAA approximate solar position, camera-space rectangular FOV projection. Degrees, metres, epoch milliseconds; north-clockwise azimuth.
@@ -26,4 +26,4 @@ Ground speed constant per leg, straight great-circle legs, no turning/accelerati
 `dist/modules/search.js` is an independent asynchronous search kernel. It reuses route timing and camera geometry, samples sailing-only intervals at 30-second midpoints, and evaluates a bounded grid of departure candidates. All constraints are ANDed. Results sort by longest contiguous qualifying window, then total qualifying duration. Stops break continuity. Windows can cross adjacent legs when there is no stop. UI displays the top 20 candidates and applies only departure time. Existing waypoint target times remain constraints and are recalculated on apply. Search criteria are session-local.
 
 ## 3D sky view
-`dist/modules/sky.js` projects ship-relative 3D unit vectors into an orthographic view from four vessel sides at 22 degrees elevation. The transparent sky dome exposes distant-side points. Camera FOV is derived from a rectangular pinhole frustum projected on the sphere; it is a geometric schematic, not a camera image. Display direction never changes model heading or camera geometry. The map toolbar also opens an enlarged view on layouts where the inspector is hidden.
+`dist/modules/sky.js` uses east/north/up world coordinates and a fixed north-up orthographic view from the south at 22 degrees elevation. Ship geometry rotates only with route heading. The sun uses absolute solar azimuth and elevation, independently of camera yaw. Camera rays use heading plus relative yaw. Front/rear/left/right presets set the single active camera's yaw to 0/180/-90/90 degrees, preserving pitch and FOV, and update the same model used by the 2D compass, lighting analysis and departure search. Arbitrary yaw values remain supported and clear preset highlights. This is not a multi-camera configuration store. The map toolbar also opens an enlarged sky view.

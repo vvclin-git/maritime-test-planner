@@ -67,3 +67,13 @@ npm test
 https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages
 
 https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site
+
+## 2026-10-16 更新：天球與羅盤方向統一
+
+- 天球固定北向，東方在右，船體按航向旋轉；與 2D 羅盤共用地理基準。
+- 「前視／後視／左視／右視」設定目前攝影機的偏航角，保留俯仰與 FOV。
+- 切換相機不旋轉船體或太陽；光照結果與時間搜尋採用更新後的相機設定。
+- 此為單一攝影機方向快捷設定，尚未建立多台攝影機的獨立參數檔。
+- 3D 投影會壓縮地平面的角度；地理方向一致，但不等於 2D 的畫面角度。
+
+更新既有 repository 時，覆蓋本套件同名檔案並 push main，即可觸發部署。瀏覽器若仍顯示舊版，可用 Ctrl+F5 重新載入。
