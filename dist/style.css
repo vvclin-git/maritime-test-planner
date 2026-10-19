@@ -5,3 +5,36 @@ dialog{width:min(980px,95vw);max-height:90vh;border:1px solid var(--line);border
 .sky-panel{border-top:1px solid var(--line);padding-top:14px;margin:10px 0 18px}.sky-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;font-size:12px}.sky-title button{font-size:10px;padding:4px 7px}.sky-views{display:flex;gap:4px}.sky-views button{flex:1;padding:5px 3px;font-size:11px}.sky-views button[aria-pressed="true"]{background:var(--teal);color:white;border-color:var(--teal)}#sky3d{width:100%;display:block;margin-top:8px}.sky-help{font-size:9px;margin:0}#skyDialog{width:min(740px,95vw)}#sky3dLarge{width:100%;max-height:60vh;display:block}.inspector{max-height:calc(100vh - 76px);overflow:auto}@media(max-width:750px){.inspector{max-height:none}#sky3d{max-width:360px}}
 
 #pan[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:white}
+
+/* Reserve the desktop viewport for planning; sample details continue below. */
+@media(min-width:751px){
+  header{height:56px;padding:0 18px}
+  .brand{font-size:19px;gap:9px}
+  .brand small{font-size:9px;letter-spacing:1px}
+  .logo{width:34px;height:34px;line-height:30px;font-size:28px;border-radius:9px}
+  nav button{padding:6px 10px;font-size:12px}
+  main{min-height:calc(100dvh - 56px)}
+  .settings,.inspector{max-height:calc(100dvh - 56px)}
+  aside{padding:16px}
+  .section-title{margin-bottom:10px}
+  .section-title:not(:first-child){padding-top:14px;margin-top:14px}
+  .settings label{margin-bottom:9px}
+  .settings input,.settings select{padding:6px 8px;margin-top:4px}
+  .workspace{padding:10px}
+  .planning-view{height:calc(100dvh - 76px);min-height:430px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:8px}
+  .overview{margin:0;padding:6px 0;border-radius:7px}
+  .overview strong{font-size:17px;line-height:1.2;margin-top:0}
+  .map-wrap{height:100%;min-height:0;border-radius:7px}
+  .map-toolbar{left:8px;top:8px;gap:4px}
+  .map-toolbar button,.map-toolbar select{padding:6px 8px;min-height:32px}
+  .map-help{padding:3px 8px;bottom:30px}
+  .timeline{margin:0;padding:6px 12px;border-radius:7px}
+  .timeline b{font-size:17px}
+  .timeline input{display:block;height:16px;margin:2px 0}
+  .timeline button{min-height:28px}
+  .sample-head{margin-top:8px}
+  #compass{display:block;max-width:180px;margin:10px auto 0}
+  #sky3d{max-width:200px;margin:6px auto 0}
+  .coordinates{margin-bottom:12px}
+  .metric{padding:8px 0}
+}
