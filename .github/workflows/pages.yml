@@ -20,10 +20,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
       - name: Verify application
-        run: |
-          node --check dist/app.js
-          node tests.mjs
-          node search-tests.mjs
+        run: npm test
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload static site

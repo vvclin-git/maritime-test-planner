@@ -1,12 +1,13 @@
 import {renderSky} from './modules/sky.js';
+import {SEARCH_STORAGE_KEY,searchFields,resolveSearchPreferences} from './modules/preferences.js';
 import {searchDepartures} from './modules/search.js';
 import {demo,validate,calculate,pointAt} from './modules/model.js';
 import {distance,interpolate} from './modules/geometry.js';
 import {download,csv,geojson} from './modules/io.js';
 const $=id=>document.getElementById(id),fmt=ms=>new Date(ms).toLocaleTimeString('en-GB',{timeZone:'Asia/Taipei',hour12:false}),esc=s=>String(s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
-let project=demo(),result,selectedTime,drawing=false,playing=null,tile,toastTimer;
+let project=demo(),result,selectedTime,drawing=false,panLocked=false,spacePanning=false,playing=null,tile,toastTimer;
 try{const saved=localStorage.getItem('maritime-plan-v1');if(saved)project=validate(JSON.parse(saved));}catch{}
-const map=L.map('map',{zoomControl:false}).setView([22.59,120.25],12);L.control.zoom({position:'topright'}).addTo(map);L.control.scale({imperial:false,position:'bottomright'}).addTo(map);
+const map=L.map('map',{zoomControl:false,dragging:true}).setView([22.59,120.25],12);L.control.zoom({position:'topright'}).addTo(map);L.control.scale({imperial:false,position:'bottomright'}).addTo(map);
 const routes=L.layerGroup().addTo(map),markers=L.layerGroup().addTo(map),sampleLayer=L.layerGroup().addTo(map),current=L.layerGroup().addTo(map);
 const providers={emap:['https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}','© 內政部國土測繪中心'],photo:['https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}','© 內政部國土測繪中心'],satellite:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}','Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics'],osm:['https://tile.openstreetmap.org/{z}/{x}/{y}.png','© OpenStreetMap contributors']};
 function basemap(){if(tile)map.removeLayer(tile);$('tileStatus').textContent='';const [url,attribution]=providers[$('base').value];tile=L.tileLayer(url,{attribution,maxZoom:19});tile.on('tileerror',()=>{$('tileStatus').textContent='部分底圖載入失敗，請切換其他底圖；航線計算仍可使用。';});tile.addTo(map);}
@@ -19,10 +20,10 @@ function color(s){if(s.elevation<=0)return '#657792';if($('mode').value==='ship'
 function waypoints(){ $('legCount').textContent=project.segments.length+' LEGS';$('waypoints').innerHTML=project.waypoints.map((w,i)=>{const l=result.legs[i],t=w.target?Date.parse(w.target+'+08:00'):null,delta=t?(result.arrivals[i]-t)/60000:null,previous=result.legs[i-1],available=t&&previous?(t-previous.start)/1000:null;return `<div class="waypoint"><div class="wp-title"><b>● P${String(i+1).padStart(2,'0')} ${i===0?'起點':i===project.waypoints.length-1?'終點':''}</b><button data-remove="${i}" aria-label="刪除航點 ${i+1}">×</button></div><div class="eta">${fmt(result.arrivals[i])} 抵達 · ${w.lat.toFixed(4)}, ${w.lng.toFixed(4)}</div><div class="two"><label>停留（分鐘）<input type="number" min="0" max="1440" value="${w.wait}" data-wait="${i}"></label>${l?`<label>至下一點（kt）<input type="number" min="0.1" max="100" step="0.5" value="${l.speed}" data-speed="${i}"></label>`:''}</div><label>指定抵達時間（選填）<input type="datetime-local" value="${esc(w.target||'')}" data-target="${i}"></label>${delta!==null?`<div class="constraint">${delta>=0?'延誤':'提早'} ${Math.abs(delta).toFixed(1)} 分${previous?available>0?` · 此段需 ${(previous.length/(available*.514444)).toFixed(2)} kt`:' · 此段時間不可行':''}</div>`:''}${l?`<div class="hint">→ ${(l.length/1000).toFixed(2)} km · ${l.heading.toFixed(1)}°</div>`:''}</div>`;}).join('');
  $('waypoints').querySelectorAll('input').forEach(el=>el.onchange=()=>{const p=structuredClone(project);if(el.dataset.speed!==undefined)p.segments[Number(el.dataset.speed)].speed=Number(el.value);if(el.dataset.wait!==undefined)p.waypoints[Number(el.dataset.wait)].wait=Number(el.value);if(el.dataset.target!==undefined)p.waypoints[Number(el.dataset.target)].target=el.value;commit(p);});$('waypoints').querySelectorAll('[data-remove]').forEach(el=>el.onclick=()=>{const p=structuredClone(project),i=Number(el.dataset.remove);p.waypoints.splice(i,1);p.segments.splice(Math.min(i,p.segments.length-1),1);commit(p);});}
 function render(){routes.clearLayers();markers.clearLayers();sampleLayer.clearLayers();$('distance').textContent=(result.total/1000).toFixed(2)+' km';$('duration').textContent=((result.end-result.start)/60000).toFixed(1)+' 分';$('arrival').textContent=fmt(result.end);$('count').textContent=result.samples.length;$('startLabel').textContent=fmt(result.start);$('endLabel').textContent=fmt(result.end);waypoints();
- for(const leg of result.legs){const n=Math.max(1,Math.min(100,Math.ceil(leg.length/200)));for(let j=0;j<n;j++){const s=pointAt(project,result,leg.start+(leg.end-leg.start)*(j+.5)/n,leg.index);L.polyline([interpolate(leg.a,leg.b,j/n),interpolate(leg.a,leg.b,(j+1)/n)],{color:color(s),weight:5,opacity:.9}).addTo(routes).on('click',e=>{L.DomEvent.stopPropagation(e);if(e.originalEvent.shiftKey){const p=structuredClone(project);p.waypoints.splice(leg.index+1,0,{lat:e.latlng.lat,lng:e.latlng.lng,wait:0,target:''});p.segments.splice(leg.index+1,0,{speed:leg.speed});commit(p);}else{const fraction=Math.max(0,Math.min(1,distance(leg.a,e.latlng)/leg.length));selectedTime=leg.start+fraction*(leg.end-leg.start);updateCurrent();}});}}
- project.waypoints.forEach((w,i)=>L.marker(w,{draggable:true,icon:L.divIcon({className:'waypoint-marker',html:String(i+1).padStart(2,'0'),iconSize:[28,28],iconAnchor:[14,14]})}).addTo(markers).on('dragend',e=>{const p=structuredClone(project),pos=e.target.getLatLng();p.waypoints[i].lat=pos.lat;p.waypoints[i].lng=pos.lng;commit(p);}).on('click',()=>{selectedTime=result.arrivals[i];updateCurrent();}));
- const every=Math.max(1,Math.ceil(result.samples.length/60));result.samples.forEach((s,i)=>{if(i%every&&i!==result.samples.length-1)return;const m=L.circleMarker(s,{radius:3,color:'white',weight:1,fillColor:color(s),fillOpacity:1}).addTo(sampleLayer);m.bindTooltip(fmt(s.time),{permanent:$('mode').value==='time',className:'time-tooltip',direction:'top'});m.on('click',()=>{selectedTime=s.time;updateCurrent();});});
- $('samples').innerHTML=result.samples.slice(0,1000).map((s,i)=>`<tr data-sample="${i}"><td>P${String(i+1).padStart(3,'0')}</td><td>${fmt(s.time)}</td><td>${s.leg+1}</td><td>${s.heading.toFixed(1)}°</td><td>${s.azimuth.toFixed(1)}°</td><td>${s.elevation.toFixed(1)}°</td><td>${s.shipRelative.toFixed(1)}°</td><td>${s.opticalAngle.toFixed(1)}°</td><td>${s.elevation<=0?'夜間':s.inFov?'☀ 太陽入鏡':'一般'}</td></tr>`).join('')+(result.samples.length>1000?'<tr><td colspan="9">畫面顯示前 1000 點；匯出包含全部取樣點。</td></tr>':'');$('samples').querySelectorAll('tr[data-sample]').forEach(el=>el.onclick=()=>{const s=result.samples[Number(el.dataset.sample)];selectedTime=s.time;map.panTo(s);updateCurrent();});selectedTime=Math.max(result.start,Math.min(result.end,selectedTime??result.start));updateCurrent();}
+ for(const leg of result.legs){const n=Math.max(1,Math.min(100,Math.ceil(leg.length/200)));for(let j=0;j<n;j++){const s=pointAt(project,result,leg.start+(leg.end-leg.start)*(j+.5)/n,leg.index);L.polyline([interpolate(leg.a,leg.b,j/n),interpolate(leg.a,leg.b,(j+1)/n)],{color:color(s),weight:5,opacity:.9}).addTo(routes).on('click',e=>{L.DomEvent.stopPropagation(e);if(panning())return;if(e.originalEvent.shiftKey){const p=structuredClone(project);p.waypoints.splice(leg.index+1,0,{lat:e.latlng.lat,lng:e.latlng.lng,wait:0,target:''});p.segments.splice(leg.index+1,0,{speed:leg.speed});commit(p);}else{const fraction=Math.max(0,Math.min(1,distance(leg.a,e.latlng)/leg.length));selectedTime=leg.start+fraction*(leg.end-leg.start);updateCurrent();}});}}
+ project.waypoints.forEach((w,i)=>L.marker(w,{draggable:true,autoPan:true,autoPanPadding:[60,60],autoPanSpeed:12,icon:L.divIcon({className:'waypoint-marker',html:String(i+1).padStart(2,'0'),iconSize:[28,28],iconAnchor:[14,14]})}).addTo(markers).on('dragend',e=>{const p=structuredClone(project),pos=e.target.getLatLng();p.waypoints[i].lat=pos.lat;p.waypoints[i].lng=pos.lng;commit(p);}).on('click',()=>{if(panning())return;selectedTime=result.arrivals[i];updateCurrent();}));
+ const every=Math.max(1,Math.ceil(result.samples.length/60));result.samples.forEach((s,i)=>{if(i%every&&i!==result.samples.length-1)return;const m=L.circleMarker(s,{radius:3,color:'white',weight:1,fillColor:color(s),fillOpacity:1}).addTo(sampleLayer);m.bindTooltip(fmt(s.time),{permanent:$('mode').value==='time',className:'time-tooltip',direction:'top'});m.on('click',()=>{if(panning())return;selectedTime=s.time;updateCurrent();});});
+ $('samples').innerHTML=result.samples.slice(0,1000).map((s,i)=>`<tr data-sample="${i}"><td>P${String(i+1).padStart(3,'0')}</td><td>${fmt(s.time)}</td><td>${s.leg+1}</td><td>${s.heading.toFixed(1)}°</td><td>${s.azimuth.toFixed(1)}°</td><td>${s.elevation.toFixed(1)}°</td><td>${s.shipRelative.toFixed(1)}°</td><td>${s.opticalAngle.toFixed(1)}°</td><td>${s.elevation<=0?'夜間':s.inFov?'☀ 太陽入鏡':'一般'}</td></tr>`).join('')+(result.samples.length>1000?'<tr><td colspan="9">畫面顯示前 1000 點；匯出包含全部取樣點。</td></tr>':'');$('samples').querySelectorAll('tr[data-sample]').forEach(el=>el.onclick=()=>{const s=result.samples[Number(el.dataset.sample)];selectedTime=s.time;map.panTo(s);updateCurrent();});updateMapInteraction();selectedTime=Math.max(result.start,Math.min(result.end,selectedTime??result.start));updateCurrent();}
 function updateCurrent(){current.clearLayers();const s=pointAt(project,result,selectedTime);updateSky(s);$('timeline').value=result.end===result.start?0:(selectedTime-result.start)/(result.end-result.start)*1000;$('timeLabel').textContent=fmt(selectedTime);$('phase').textContent=s?(s.waiting?'停留中 · 航向為假設':'航行中'):'請新增至少兩個航點';if(!s){$('metrics').innerHTML='至少建立兩個航點，即可計算光照。';$('compass').innerHTML='';$('coordinates').textContent='';$('statusBadge').textContent='等待航線';return;}
  L.circleMarker(s,{radius:8,color:'white',weight:3,fillColor:'#173e49',fillOpacity:1}).addTo(current);const c=map.latLngToLayerPoint(s),end=map.layerPointToLatLng([c.x+Math.sin(s.azimuth*Math.PI/180)*65,c.y-Math.cos(s.azimuth*Math.PI/180)*65]);L.polyline([s,end],{color:'#e1a334',weight:2,dashArray:'5 5',interactive:false}).addTo(current);
  $('statusBadge').textContent=s.elevation<=0?'☾ 太陽低於地平線':s.inFov?'☀ 太陽位於攝影機視野':'◉ 太陽位於視野外';$('statusBadge').className='badge'+(s.inFov?' warn':'');$('coordinates').textContent=`${s.lat.toFixed(5)}° N, ${s.lng.toFixed(5)}° E`;
@@ -34,26 +35,49 @@ $('mode').onchange=()=>{document.querySelector('.legend').innerHTML=$('mode').va
 $('timeline').oninput=()=>{selectedTime=result.start+Number($('timeline').value)/1000*(result.end-result.start);updateCurrent();};
 $('play').onclick=()=>{if(playing){clearInterval(playing);playing=null;$('play').textContent='▶ 播放';return;}$('play').textContent='Ⅱ 暫停';playing=setInterval(()=>{selectedTime+=Math.max(1000,(result.end-result.start)/200);if(selectedTime>result.end)selectedTime=result.start;updateCurrent();},100);};
 function fit(){if(project.waypoints.length)map.fitBounds(L.latLngBounds(project.waypoints),{padding:[70,70],maxZoom:15});}$('fit').onclick=fit;
-$('draw').onclick=()=>{drawing=!drawing;$('draw').textContent=drawing?'✓ 完成繪製':'＋ 繪製航線';$('mapHelp').textContent=drawing?'點擊地圖新增航點，完成後按「完成繪製」':'拖曳航點調整航線 · 點擊航段查看時間 · Shift＋點擊航段插入航點';map.getContainer().style.cursor=drawing?'crosshair':'';};map.on('click',e=>{if(!drawing)return;const p=structuredClone(project);p.waypoints.push({lat:e.latlng.lat,lng:e.latlng.lng,wait:0,target:''});if(p.waypoints.length>1)p.segments.push({speed:p.defaultSpeed});commit(p);});
+function panning(){return panLocked||spacePanning;}
+function updateMapInteraction(){
+ const pan=panning();
+ $('draw').textContent=drawing?'✓ 完成繪製':'＋ 繪製航線';$('draw').setAttribute('aria-pressed',String(drawing));
+ $('pan').setAttribute('aria-pressed',String(pan));
+ $('mapHelp').textContent=pan?'平移模式：拖曳地圖，不變更航點；再按「平移地圖」或放開空白鍵恢復':drawing?'點擊新增航點 · 拖曳空白處平移 · 按住空白鍵可從航點上平移':'拖曳航點（邊緣自動平移）· 空白處拖曳平移 · Shift＋點擊航段插入航點';
+ markers.eachLayer(marker=>{if(pan)marker.dragging.disable();else marker.dragging.enable();});
+ map.getContainer().style.cursor=pan?'grab':drawing?'crosshair':'';
+}
+$('draw').onclick=()=>{drawing=!drawing;panLocked=false;updateMapInteraction();};
+$('pan').onclick=()=>{panLocked=!panLocked;updateMapInteraction();};
+window.addEventListener('keydown',e=>{
+ if(e.code!=='Space'||e.repeat||e.target.closest('input,select,textarea,button,[contenteditable]')||document.querySelector('dialog[open]'))return;
+ if(!map.getContainer().matches(':hover')&&!map.getContainer().contains(document.activeElement))return;
+ e.preventDefault();spacePanning=true;updateMapInteraction();
+});
+window.addEventListener('keyup',e=>{if(e.code==='Space'&&spacePanning){e.preventDefault();spacePanning=false;updateMapInteraction();}});
+window.addEventListener('blur',()=>{spacePanning=false;updateMapInteraction();});
+map.on('click',e=>{if(!drawing||panning())return;const p=structuredClone(project);p.waypoints.push({lat:e.latlng.lat,lng:e.latlng.lng,wait:0,target:''});if(p.waypoints.length>1)p.segments.push({speed:p.defaultSpeed});commit(p);});
 $('reverse').onclick=()=>{const p=structuredClone(project);p.waypoints.reverse();p.segments.reverse();commit(p);};$('clear').onclick=()=>{if(confirm('清空目前航線？建議先儲存 JSON。')){const p=structuredClone(project);p.waypoints=[];p.segments=[];commit(p);}};$('demo').onclick=()=>{if(confirm('以示範航線取代目前專案？')){commit(demo());syncForm();fit();}};
 $('save').onclick=()=>download('maritime-project.json',JSON.stringify(project,null,2));$('csv').onclick=()=>download('route-samples.csv',csv(result.samples),'text/csv;charset=utf-8');$('geo').onclick=()=>download('route.geojson',JSON.stringify(geojson(project,result),null,2));$('export').onclick=()=>{$('csv').click();notify('已匯出完整航跡 CSV（時間欄為 UTC ISO 8601）');};$('load').onclick=()=>$('file').click();$('file').onchange=async e=>{try{const f=e.target.files[0];if(!f)return;if(f.size>2000000)throw Error('專案檔超過 2 MB');const p=validate(JSON.parse(await f.text()));calculate(p);commit(p);syncForm();fit();notify('專案已載入');}catch(err){notify('無法載入：'+err.message);}e.target.value='';};
 syncForm();result=calculate(project);render();fit();
 
-let searchCancelled=false,searchBusy=false;
+let searchCancelled=false,searchBusy=false,searchPreferences;
+try{searchPreferences=resolveSearchPreferences(project,JSON.parse(localStorage.getItem(SEARCH_STORAGE_KEY)));}catch{searchPreferences=resolveSearchPreferences(project);}
+function readSearchCriteria(){return Object.fromEntries(Object.entries(searchFields).map(([key,id])=>[key,['step','minElevation','maxElevation','maxAngle','minimum'].includes(key)?Number($(id).value):$(id).value]));}
+function rememberSearch(){searchPreferences=readSearchCriteria();try{localStorage.setItem(SEARCH_STORAGE_KEY,JSON.stringify(searchPreferences));}catch{}return searchPreferences;}
+for(const id of Object.values(searchFields))for(const event of ['input','change'])$(id).addEventListener(event,rememberSearch);
+$('searchDialog').addEventListener('close',rememberSearch);
 const localDate=ms=>new Date(ms+8*3600000).toISOString().slice(0,16);
 const fullTime=ms=>localDate(ms).replace('T',' ') + ':' + String(new Date(ms).getUTCSeconds()).padStart(2,'0');
 $('solarSearch').onclick=()=>{
- const day=project.departure.slice(0,10);
- $('searchStart').value=day+'T07:00';$('searchEnd').value=day+'T10:00';
+ searchPreferences=resolveSearchPreferences(project,searchPreferences);
  $('searchLeg').innerHTML='<option value="all">整條航線</option>'+project.segments.map((_,i)=>`<option value="${i}">航段 ${i+1} · P${i+1} → P${i+2}</option>`).join('');
- $('searchResults').innerHTML='';$('searchProgress').textContent='設定條件後開始搜尋。';$('searchDialog').showModal();
+ for(const [key,id] of Object.entries(searchFields))$(id).value=searchPreferences[key];
+ $('searchResults').innerHTML='';$('searchProgress').textContent='搜尋條件會自動保留，可調整後開始搜尋。';$('searchDialog').showModal();
 };
 $('closeSearch').onclick=()=>{searchCancelled=true;$('searchDialog').close();};
 $('searchDialog').addEventListener('cancel',()=>{searchCancelled=true;});
 $('cancelSearch').onclick=()=>{searchCancelled=true;};
 $('runSearch').onclick=async()=>{
  if(searchBusy)return;searchBusy=true;searchCancelled=false;
- const snapshot=structuredClone(project),criteria={start:$('searchStart').value,end:$('searchEnd').value,step:Number($('searchStep').value),leg:$('searchLeg').value,minElevation:Number($('minElevation').value),maxElevation:Number($('maxElevation').value),fov:$('searchFov').value,reference:$('searchReference').value,maxAngle:Number($('searchAngle').value),minimum:Number($('searchMinimum').value)};
+ const snapshot=structuredClone(project),criteria=rememberSearch();
  $('runSearch').disabled=true;$('cancelSearch').hidden=false;$('searchResults').innerHTML='';
  $('searchDialog').querySelectorAll('input,select').forEach(el=>el.disabled=true);
  try{const found=await searchDepartures(snapshot,criteria,{cancelled:()=>searchCancelled,onProgress:(n,total)=>{$('searchProgress').textContent=`已評估 ${n} / ${total} 個出發時間…`;}});
