@@ -32,7 +32,7 @@ echo Maritime Field Planner
 echo URL: http://127.0.0.1:8000/
 echo Press Ctrl+C in this window to stop the server.
 echo.
-start "" /min cmd /c "timeout /t 2 /nobreak >nul & start "" http://127.0.0.1:8000/"
+start "" /min cmd /c "timeout /t 2 /nobreak >nul & rundll32 url.dll,FileProtocolHandler http://127.0.0.1:8000/"
 %PYTHON_CMD% -m http.server 8000 --bind 127.0.0.1 --directory dist
 set "EXIT_CODE=%ERRORLEVEL%"
 echo.
