@@ -6,6 +6,12 @@ Browser-local maritime test route planner.
 
 此套件包含航線編輯、光照分析、出發時間搜尋、北向固定立體天球與四方向相機快捷設定及 GitHub Pages 自動部署設定。
 
+## Windows local launch
+
+Download or clone the repository, then double-click `start-local.bat` in the repository root. The script checks for Python 3 (`py -3` first, then `python`), starts the local HTTP server serving `dist/` on `127.0.0.1:8000`, and opens the default browser. Leave the console window open while using the planner; press Ctrl+C to stop the server. No `npm install` is required for local usage. If port 8000 is already occupied, stop the other service before relaunching.
+
+Alternatively run `start-local.ps1` from PowerShell.
+
 ## Modules
 - `dist/modules/geometry.js`: pure spherical geodesy, NOAA approximate solar position, camera-space rectangular FOV projection. Degrees, metres, epoch milliseconds; north-clockwise azimuth.
 - `dist/modules/model.js`: versioned project schema validation, leg schedules, waypoint arrival constraints consumed by UI, distance/time sampling, arbitrary timeline evaluation. Taiwan time is explicitly UTC+08:00.
